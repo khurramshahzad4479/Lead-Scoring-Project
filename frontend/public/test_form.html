@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .form-box { background: white; padding: 40px; border-radius: 20px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h2 { color: #1e293b; text-align: center; margin-bottom: 8px; font-size: 24px; }
+        .subtitle { color: #64748b; text-align: center; margin-bottom: 30px; font-size: 14px; }
+        .field { margin-bottom: 18px; }
+        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; font-weight: 500; }
+        input, textarea, select { width: 100%; padding: 12px 14px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; color: #1e293b; font-size: 15px; outline: none; transition: border 0.2s; }
+        input:focus, textarea:focus, select:focus { border-color: #667eea; }
+        textarea { height: 80px; resize: vertical; }
+        button { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102,126,234,0.4); }
+        button:disabled { opacity: 0.6; transform: none; }
+        .msg { padding: 14px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; display: none; }
+        .success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .note { color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px; }
+        
+        /* HIDDEN TRACKING - Customer ko nahi dikhta */
+        .hidden-fields { display: none; }
+    </style>
+</head>
+<body>
+    <div class="form-box">
+        <h2>Get In Touch 📞</h2>
+        <p class="subtitle">Fill the form and we'll get back to you soon!</p>
+        
+        <div id="msg" class="msg"></div>
+        
+        <form id="leadForm">
+            <!-- Customer fills these -->
+            <div class="field">
+                <label>Your Name *</label>
+                <input type="text" name="name" placeholder="John Doe" required>
+            </div>
+            <div class="field">
+                <label>Email Address *</label>
+                <input type="email" name="email" placeholder="john@example.com" required>
+            </div>
+            <div class="field">
+                <label>Phone Number</label>
+                <input type="tel" name="phone" placeholder="+92 300 1234567">
+            </div>
+            <div class="field">
+                <label>I'm interested in</label>
+                <select name="interest">
+                    <option>General Inquiry</option>
+                    <option>Pricing</option>
+                    <option>Demo</option>
+                    <option>Support</option>
+                    <option>Partnership</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Message</label>
+                <textarea name="message" placeholder="Tell us more about your needs..."></textarea>
+            </div>
+            
+            <button type="submit" id="submitBtn">Send Message </button>
+        </form>
+        
+        <p class="note">We respect your privacy. No spam, ever.</p>
+    </div>
+
+    <!-- HIDDEN: Auto-tracking fields -->
+    <div class="hidden-fields">
+        <input type="hidden" id="tracking_source" value="Website Form">
+        <input type="hidden" id="tracking_medium" value="Direct">
+        <input type="hidden" id="tracking_visits" value="0">
+        <input type="hidden" id="tracking_time" value="0">
+        <input type="hidden" id="tracking_pages" value="0">
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/webhook/lead';
+        
+        // ===== AUTO TRACKING =====
+        // Ye sab AUTOMATIC hai - customer ko pata bhi nahi chalega
+        
+        // 1. Track kahan se aaya (Facebook, Google, Direct)
+        function detectSource() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const utm_source = urlParams.get('utm_source');
+            const utm_medium = urlParams.get('utm_medium');
+            const referrer = document.referrer;
+            
+            if (utm_source) return { source: utm_source, medium: utm_medium || utm_source };
+            if (referrer.includes('facebook')) return { source: 'Facebook', medium: 'Social' };
+            if (referrer.includes('google')) return { source: 'Google', medium: 'Organic' };
+            if (referrer.includes('linkedin')) return { source: 'LinkedIn', medium: 'Social' };
+            if (referrer.includes('instagram')) return { source: 'Instagram', medium: 'Social' };
+            return { source: 'Website Form', medium: 'Direct' };
+        }
+        
+        // 2. Track page visits (Cookie based)
+        function trackVisits() {
+            let visits = parseInt(getCookie('page_visits') || '0') + 1;
+            setCookie('page_visits', visits, 30);
+            return visits;
+        }
+        
+        // 3. Track time spent
+        let startTime = Date.now();
+        window.addEventListener('beforeunload', () => {
+            let timeSpent = Math.floor((Date.now() - startTime) / 1000);
+            setCookie('last_time_spent', timeSpent, 30);
+        });
+        
+        function getTimeSpent() {
+            return parseInt(getCookie('last_time_spent') || '0');
+        }
+        
+        // 4. Track page views
+        function trackPageViews() {
+            let pages = parseInt(getCookie('page_views') || '0') + 1;
+            setCookie('page_views', pages, 30);
+            return pages;
+        }
+        
+        // Cookie helpers
+        function getCookie(name) {
+            let match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return match ? match[2] : null;
+        }
+        function setCookie(name, value, days) {
+            let d = new Date();
+            d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+            document.cookie = name + '=' + value + ';expires=' + d.toUTCString() + ';path=/';
+        }
+        
+        // Run tracking on page load
+        const tracking = detectSource();
+        const visits = trackVisits();
+        const timeSpent = getTimeSpent();
+        const pageViews = trackPageViews();
+        
+        // ===== FORM SUBMIT =====
+        document.getElementById('leadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const msgDiv = document.getElementById('msg');
+            const formData = new FormData(e.target);
+            
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            msgDiv.className = 'msg';
+            
+            // Customer data + AUTO tracking data
+            const payload = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                occupation: formData.get('interest') === 'General Inquiry' ? 'Unknown' : formData.get('interest'),
+                source: tracking.source,
+                medium: tracking.medium,
+                visits: visits,
+                time_spent: timeSpent,
+                page_views: pageViews
+            };
+            
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    msgDiv.className = 'msg success';
+                    msgDiv.textContent = '✅ Thank you! We\'ll contact you soon.';
+                    e.target.reset();
+                } else {
+                    msgDiv.className = 'msg error';
+                    msgDiv.textContent = '❌ Something went wrong. Please try again.';
+                }
+            } catch (err) {
+                msgDiv.className = 'msg error';
+                msgDiv.textContent = '❌ Connection error. Please try again.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Message ';
+            }
+        });
+    </script>
+</body>
+</html>

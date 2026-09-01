@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .form-box { background: white; padding: 40px; border-radius: 20px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h2 { color: #1e293b; text-align: center; margin-bottom: 8px; font-size: 24px; }
+        .subtitle { color: #64748b; text-align: center; margin-bottom: 30px; font-size: 14px; }
+        .field { margin-bottom: 18px; }
+        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; font-weight: 500; }
+        input, textarea, select { width: 100%; padding: 12px 14px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; color: #1e293b; font-size: 15px; outline: none; }
+        input:focus, textarea:focus, select:focus { border-color: #667eea; }
+        textarea { height: 80px; resize: vertical; }
+        button { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; font-weight: 600; }
+        button:hover { opacity: 0.9; }
+        .msg { padding: 14px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; display: none; }
+        .success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    </style>
+</head>
+<body>
+    <div class="form-box">
+        <h2>Get In Touch</h2>
+        <p class="subtitle">Fill the form and we'll get back to you soon!</p>
+        <div id="msg" class="msg"></div>
+        <form id="leadForm">
+            <div class="field">
+                <label>Your Name *</label>
+                <input type="text" name="name" placeholder="John Doe" required>
+            </div>
+            <div class="field">
+                <label>Email Address *</label>
+                <input type="email" name="email" placeholder="john@example.com" required>
+            </div>
+            <div class="field">
+                <label>Phone Number</label>
+                <input type="tel" name="phone" placeholder="+92 300 1234567">
+            </div>
+            <div class="field">
+                <label>I'm interested in</label>
+                <select name="interest">
+                    <option>General Inquiry</option>
+                    <option>Pricing</option>
+                    <option>Demo</option>
+                    <option>Support</option>
+                    <option>Partnership</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Message</label>
+                <textarea name="message" placeholder="Tell us more about your needs..."></textarea>
+            </div>
+            <button type="submit" id="submitBtn">Send Message</button>
+        </form>
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">We respect your privacy. No spam, ever.</p>
+    </div>
+
+    <script>
+        const API_URL = 'https://lead-scoring.onrender.com';
+
+        document.getElementById('leadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const msgDiv = document.getElementById('msg');
+            const formData = new FormData(e.target);
+            
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            msgDiv.className = 'msg';
+            
+            try {
+                const res = await fetch(`${API_URL}/webhook/lead`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: formData.get('name'),
+                        email: formData.get('email'),
+                        occupation: formData.get('interest'),
+                        source: 'Website Form',
+                        medium: 'Direct',
+                        visits: 1,
+                        time_spent: 0,
+                        page_views: 1,
+                        "Lead Source": "Direct",
+                        "Lead Origin": "Website Form",
+                        "What is your current occupation": "Unknown",
+                        "TotalVisits": 1,
+                        "Total Time Spent on Website": 0,
+                        "Page Views Per Visit": 0
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    msgDiv.className = 'msg success';
+                    msgDiv.textContent = 'Thank you! We will contact you soon.';
+                    e.target.reset();
+                } else {
+                    msgDiv.className = 'msg error';
+                    msgDiv.textContent = 'Something went wrong. Please try again.';
+                }
+            } catch (err) {
+                msgDiv.className = 'msg error';
+                msgDiv.textContent = 'Connection error. Please try again.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Message';
+            }
+        });
+    </script>
+</body>
+</html>

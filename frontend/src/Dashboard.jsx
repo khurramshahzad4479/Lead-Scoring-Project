@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const API_BASE = 'https://lead-scoring-pro.onrender.com'
+const API_BASE = ' https://lead-scoring-4479-backend.onrender.com'
 
 const INITIAL_FORM = {
   name: '', email: '',

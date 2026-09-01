@@ -22,7 +22,8 @@ app = FastAPI(title="Lead Scoring API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://lead-scoring-4479-frontend.onrender.com",
+    "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

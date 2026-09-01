@@ -60,10 +60,11 @@
     </div>
 
     <script>
-        const API_URL = 'https://lead-scoring.onrender.com';
+        
+            const API_URL = 'https://lead-scoring-4479-backend.onrender.com';
 
         document.getElementById('leadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+            e.preventDefault();  
             const btn = document.getElementById('submitBtn');
             const msgDiv = document.getElementById('msg');
             const formData = new FormData(e.target);

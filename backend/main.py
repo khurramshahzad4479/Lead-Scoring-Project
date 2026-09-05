@@ -11,6 +11,7 @@ import json
 from dotenv import load_dotenv
 import models
 from scoring import predict_real_lead
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -101,22 +102,39 @@ def map_lead_source(utm_source, referrer, medium=""):
     return "Direct Traffic"
 
 def compute_behavior(db, session_id: str):
-    """Session ke events se REAL ML features nikaalo (server-side, authoritative)"""
-    evs = db.query(models.Event).filter(models.Event.session_id == session_id).all()
-    if not evs:
+    """Events se REAL ML features — session-based visits (30-min gap rule)"""
+    views = db.query(models.Event).filter(
+        models.Event.session_id == session_id,
+        models.Event.event == "page_view",
+    ).order_by(models.Event.created_at.asc()).all()
+    if not views:
         return None
-    page_views = [e for e in evs if e.event == "page_view"]
-    days = {e.created_at.date() for e in page_views if e.created_at}
-    visits = max(len(days), 1)
-    time_spent = sum(int((e.props or {}).get("time_on_page") or 0)
-                     for e in evs if e.event == "page_exit")
-    first = page_views[0] if page_views else None
+
+    # 1) Rapid duplicates hatao (double tab / double script, <5s gap)
+    clean = [views[0]]
+    for e in views[1:]:
+        if e.created_at - clean[-1].created_at >= timedelta(seconds=5):
+            clean.append(e)
+
+    # 2) Visits = 30-min inactivity rule (GA standard)
+    visits = 1
+    for i in range(1, len(clean)):
+        if clean[i].created_at - clean[i-1].created_at > timedelta(minutes=30):
+            visits += 1
+
+    exits = db.query(models.Event).filter(
+        models.Event.session_id == session_id,
+        models.Event.event == "page_exit",
+    ).all()
+    # Har exit max 1 hour count karo (kholi chhori tab limits)
+    time_spent = sum(min(int((e.props or {}).get("time_on_page") or 0), 3600) for e in exits)
+
     return {
         "TotalVisits": visits,
         "Total Time Spent on Website": time_spent,
-        "Page Views Per Visit": round(len(page_views) / visits, 1),
-        "utm_source": first.utm_source if first else None,
-        "referrer": first.referrer if first else None,
+        "Page Views Per Visit": round(len(clean) / visits, 1),
+        "utm_source": clean[0].utm_source,
+        "referrer": clean[0].referrer,
     }
 
 @app.post("/track")

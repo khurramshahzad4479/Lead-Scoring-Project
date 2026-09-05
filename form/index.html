@@ -1,69 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .form-box { background: white; padding: 40px; border-radius: 20px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        h2 { color: #1e293b; text-align: center; margin-bottom: 8px; font-size: 24px; }
-        .subtitle { color: #64748b; text-align: center; margin-bottom: 30px; font-size: 14px; }
-        .field { margin-bottom: 18px; }
-        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; font-weight: 500; }
-        input, textarea, select { width: 100%; padding: 12px 14px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; color: #1e293b; font-size: 15px; outline: none; }
-        input:focus, textarea:focus, select:focus { border-color: #667eea; }
-        textarea { height: 80px; resize: vertical; }
-        button { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; font-weight: 600; }
-        button:hover { opacity: 0.9; }
-        .msg { padding: 14px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; display: none; }
-        .success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
-        .error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact Us</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif; }
+  body { background:#0f172a; color:#e2e8f0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { background:#1e293b; border-radius:16px; padding:32px; width:100%; max-width:420px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  h2 { color:#38bdf8; margin-bottom:6px; }
+  p.sub { color:#94a3b8; font-size:14px; margin-bottom:24px; }
+  label { display:block; font-size:13px; color:#94a3b8; margin:14px 0 6px; }
+  input, textarea, select { width:100%; background:#0f172a; border:1px solid #334155; color:#e2e8f0; border-radius:8px; padding:12px; font-size:15px; outline:none; }
+  input:focus, textarea:focus, select:focus { border-color:#38bdf8; }
+  textarea { min-height:90px; resize:vertical; }
+  button { width:100%; margin-top:20px; background:linear-gradient(135deg,#38bdf8,#6366f1); border:none; color:#fff; padding:14px; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+  .msg { margin-top:14px; padding:12px; border-radius:8px; font-size:14px; display:none; }
+  .msg.ok { display:block; background:rgba(34,197,94,.15); color:#4ade80; }
+  .msg.err { display:block; background:rgba(239,68,68,.15); color:#f87171; }
+</style>
 </head>
 <body>
-    <div class="form-box">
-        <h2>Get In Touch</h2>
-        <p class="subtitle">Fill the form and we'll get back to you soon!</p>
-        <div id="msg" class="msg"></div>
-        <form id="leadForm">
-            <div class="field">
-                <label>Your Name *</label>
-                <input type="text" name="name" placeholder="John Doe" required>
-            </div>
-            <div class="field">
-                <label>Email Address *</label>
-                <input type="email" name="email" placeholder="john@example.com" required>
-            </div>
-            <div class="field">
-                <label>Phone Number</label>
-                <input type="tel" name="phone" placeholder="+92 300 1234567">
-            </div>
-            <div class="field">
-                <label>I'm interested in</label>
-                <select name="interest">
-                    <option>General Inquiry</option>
-                    <option>Pricing</option>
-                    <option>Demo</option>
-                    <option>Support</option>
-                    <option>Partnership</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Message</label>
-                <textarea name="message" placeholder="Tell us more about your needs..."></textarea>
-            </div>
-            <button type="submit" id="submitBtn">Send Message</button>
-        </form>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">We respect your privacy. No spam, ever.</p>
-    </div>
+<div class="card">
+  <h2>Get in Touch </h2>
+  <p class="sub">Fill the form — hum jald rabta karenge.</p>
 
-    <script>
+  <form id="leadForm">
+    <label>Full Name *</label>
+    <input id="name" name="name" required>
+
+    <label>Email *</label>
+    <input id="email" name="email" type="email" required>
+
+    <label>Phone</label>
+    <input id="phone" name="phone" type="tel">
+
+    <label>Occupation (optional)</label>
+    <select id="occupation" name="occupation">
+      <option value="">Select…</option>
+      <option>Student</option>
+      <option>Working Professional</option>
+      <option>Unemployed</option>
+      <option>Housewife</option>
+      <option>Other</option>
+    </select>
+
+    <label>Message</label>
+    <textarea id="message" name="message"></textarea>
+
+    <button type="submit" id="submitBtn">Submit</button>
+    <div class="msg" id="msg"></div>
+  </form>
+</div>
+
+<!-- ===== LSPro Tracking Script ===== -->
+<script>
 (function () {
   var API = 'https://lead-scoring-4479-backend.onrender.com/track';  
 
-  // UTM params save on first visit and session ID generation
+  //UTM params save on first visit in localStorage for later attribution
   try {
     var q = new URLSearchParams(location.search);
     ['utm_source', 'utm_medium', 'utm_campaign'].forEach(function (k) {
@@ -158,8 +154,8 @@ document.getElementById('leadForm').addEventListener('submit', async function (e
     var out = await res.json();
     if (!res.ok) throw new Error(out.detail || 'Error');
     msg.textContent = out.status === 'duplicate'
-      ? 'Your request has already been submitted. We will contact you soon!'
-      : 'Thank you! Your request has been received — our team will get back to you shortly. ';
+      ? 'Your request has already been submitted. We will get back to you soon!'
+      : 'Thank you! Your request has been received. We will get back to you soon.';
     msg.classList.add('ok');
     if (out.status !== 'duplicate') e.target.reset();
   } catch (err) {

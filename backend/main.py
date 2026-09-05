@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request, HTTPException, status
+from fastapi import FastAPI, Depends, Request, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
+import json
 from dotenv import load_dotenv
 import models
 from scoring import predict_real_lead
@@ -24,7 +25,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://lead-scoring-4479-frontend.onrender.com",
                    "https://lead-scoring-4479-form.onrender.com",
-    "http://localhost:5173"],
+                   "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -67,6 +68,96 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)):
     if not user:
         raise credentials_exception
     return user
+
+# ================= LIVE TRACKING (naya) =================
+
+ALLOWED_EVENTS = {"page_view", "page_exit", "form_start", "field_focus", "form_submit"}
+
+def map_lead_source(utm_source, referrer, medium=""):
+    """utm/referrer ko valid Lead Source category mein map karo"""
+    u = (utm_source or "").strip().lower()
+    r = (referrer or "").lower()
+    m = (medium or "").strip().lower()
+    if m in ("cpc", "ppc", "paid", "ads"):
+        return "Pay per Click Ads"
+    if u in ("google", "googleads", "adwords"):
+        return "Google"
+    if u == "bing":
+        return "bing"
+    if u in ("facebook", "fb", "instagram", "ig"):
+        return "Facebook"
+    if u == "youtube":
+        return "youtubechannel"
+    if u == "blog":
+        return "blog"
+    if u in ("linkedin", "twitter", "x", "tiktok", "pinterest", "whatsapp"):
+        return "Social Media"
+    if "google." in r or "bing." in r or "duckduckgo" in r:
+        return "Organic Search"
+    if any(s in r for s in ("facebook.com", "instagram.com", "t.co", "linkedin.com", "youtube.com", "twitter.com")):
+        return "Social Media"
+    if r:
+        return "Referral Sites"
+    return "Direct Traffic"
+
+def compute_behavior(db, session_id: str):
+    """Session ke events se REAL ML features nikaalo (server-side, authoritative)"""
+    evs = db.query(models.Event).filter(models.Event.session_id == session_id).all()
+    if not evs:
+        return None
+    page_views = [e for e in evs if e.event == "page_view"]
+    days = {e.created_at.date() for e in page_views if e.created_at}
+    visits = max(len(days), 1)
+    time_spent = sum(int((e.props or {}).get("time_on_page") or 0)
+                     for e in evs if e.event == "page_exit")
+    first = page_views[0] if page_views else None
+    return {
+        "TotalVisits": visits,
+        "Total Time Spent on Website": time_spent,
+        "Page Views Per Visit": round(len(page_views) / visits, 1),
+        "utm_source": first.utm_source if first else None,
+        "referrer": first.referrer if first else None,
+    }
+
+@app.post("/track")
+async def track_event(request: Request, db: Session = Depends(get_db)):
+    # text/plain beacon support (sendBeacon cross-origin ke liye zaroori)
+    try:
+        p = json.loads(await request.body())
+    except Exception:
+        return Response(status_code=204)
+
+    sid = str(p.get("session_id", ""))[:64]
+    event = str(p.get("event", ""))[:50]
+    if not sid.startswith("s_") or event not in ALLOWED_EVENTS:
+        return Response(status_code=204)
+
+    props = p.get("props") or {}
+    if not isinstance(props, dict):
+        props = {}
+
+    db.add(models.Event(
+        session_id=sid, event=event, props=props,
+        url=str(p.get("url") or "")[:500],
+        referrer=str(p.get("referrer") or "")[:500],
+        utm_source=str(p.get("utm_source") or "")[:100],
+    ))
+    db.commit()
+    return Response(status_code=204)
+
+@app.get("/events/recent")
+def recent_events(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    rows = db.query(models.Event).order_by(models.Event.created_at.desc()).limit(25).all()
+    return [
+        {
+            "event": r.event, "url": r.url, "props": r.props,
+            "session_id": r.session_id[:10] + "…",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+# ================= ORIGINAL ENDPOINTS =================
 
 class LoginRequest(BaseModel):
     username: str
@@ -148,57 +239,71 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
 
 @app.post("/webhook/lead")
 async def webhook_lead(request: Request, db: Session = Depends(get_db)):
-    """Simple form - only name, email, phone, message needed"""
+    """Customer form — ab REAL behavioral data ke saath"""
     try:
         data = await request.json()
-        
-        # Only these are required from customer
-        name = data.get("name", "").strip()
-        email = data.get("email", "").strip()
-        
+        name = (data.get("name") or "").strip()
+        email = (data.get("email") or "").strip()
         if not name or not email:
             raise HTTPException(status_code=400, detail="Name and email required")
-        
-        # Everything else is AUTO-FILLED or has defaults
+
+        session_id = (data.get("session_id") or "").strip()
+
+        # --- Behavioral data: events se (authoritative), warna client fallback ---
+        behavior = compute_behavior(db, session_id) if session_id else None
+        total_visits = behavior["TotalVisits"] if behavior else int(data.get("visits", 0) or 0)
+        time_spent = behavior["Total Time Spent on Website"] if behavior else int(data.get("time_spent", 0) or 0)
+        page_views = behavior["Page Views Per Visit"] if behavior else float(data.get("page_views", 0) or 0)
+
+        utm_source = data.get("utm_source") or (behavior and behavior.get("utm_source"))
+        referrer = data.get("referrer") or (behavior and behavior.get("referrer"))
+        lead_source = map_lead_source(utm_source, referrer, data.get("utm_medium"))
+        lead_origin = "Landing Page Submission"
+
         form_for_ml = {
             "name": name,
             "email": email,
-            "Lead Origin": data.get("source", "Website Form"),
-            "Lead Source": data.get("medium", "Direct"),
-            "What is your current occupation": data.get("occupation", "Unknown"),
-            "TotalVisits": data.get("visits", 0),
-            "Total Time Spent on Website": data.get("time_spent", 0),
-            "Page Views Per Visit": data.get("page_views", 0)
+            "Lead Origin": lead_origin,
+            "Lead Source": lead_source,
+            "Last Activity": "Form Submitted on Website",
+            "Last Notable Activity": "Form Submitted on Website",
+            "What is your current occupation": data.get("occupation") or "Unknown",
+            "TotalVisits": total_visits,
+            "Total Time Spent on Website": time_spent,
+            "Page Views Per Visit": page_views,
         }
-        
-        # ML Prediction
+
         ml_result = predict_real_lead(form_for_ml)
-        
-        # Duplicate check
+
         existing = db.query(models.Lead).filter(models.Lead.email == email).first()
         if existing:
             return {"status": "duplicate", "prediction": ml_result}
-        
-        # Save
+
         new_lead = models.Lead(
-            name=name,
-            email=email,
-            lead_origin=data.get("source", "Website Form"),
-            source=data.get("medium", "Direct"),
-            total_visits=int(data.get("visits", 0)),
-            time_spent=int(data.get("time_spent", 0)),
-            page_views=float(data.get("page_views", 0)),
-            occupation=data.get("occupation", "Unknown"),
-            is_converted="Hot" in ml_result
+            name=name, email=email,
+            lead_origin=lead_origin, source=lead_source,
+            total_visits=total_visits, time_spent=time_spent,
+            page_views=page_views,
+            occupation=data.get("occupation") or "Unknown",
+            is_converted="Hot" in ml_result,
         )
         db.add(new_lead)
         db.commit()
-        
+        db.refresh(new_lead)
+
+        # Events ko lead se link karo
+        if session_id:
+            db.query(models.Event).filter(
+                models.Event.session_id == session_id,
+                models.Event.lead_id.is_(None)
+            ).update({"lead_id": new_lead.id}, synchronize_session=False)
+            db.commit()
+
         return {"status": "success", "prediction": ml_result, "message": f"{name} - {ml_result}"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))    
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.on_event("startup")
 def startup():

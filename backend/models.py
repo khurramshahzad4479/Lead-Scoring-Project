@@ -1,5 +1,7 @@
 import os
 from dotenv import load_dotenv
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, func 
 
 load_dotenv()
 
@@ -54,6 +56,18 @@ class Interaction(Base):
     lead_id = Column(BigInteger, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     lead = relationship("Lead", back_populates="interactions")
+
+class Event(Base):
+    __tablename__ = "events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), index=True, nullable=False)
+    lead_id = Column(Integer, index=True)
+    event = Column(String(50), index=True, nullable=False)
+    props = Column(JSONB, default=dict)
+    url = Column(Text)s
+    referrer = Column(Text)
+    utm_source = Column(String(100))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())    
 
 class User(Base):
     __tablename__ = "users"

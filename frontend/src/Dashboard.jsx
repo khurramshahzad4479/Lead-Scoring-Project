@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const API_BASE = ' https://lead-scoring-4479-backend.onrender.com'
+const API_BASE = 'https://lead-scoring-pro.onrender.com'
 
 const INITIAL_FORM = {
   name: '', email: '',
@@ -38,8 +38,21 @@ function Dashboard({ token, username, onLogout }) {
   const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
+  const [events, setEvents] = useState([]);
 
   useEffect(() => { if (token) fetchLeads() }, [token])
+  useEffect(() => {
+  const load = async () => {
+    const res = await fetch(`${API_BASE}/events/recent`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) setEvents(await res.json());
+  };
+  load();
+  const t = setInterval(load, 5000);
+  return () => clearInterval(t);
+}, []);
+// render: events.map(e => <div>{e.created_at?.slice(11,19)} — {e.event} {e.url}</div>)  
 
   const fetchLeads = async () => {
     setFetching(true)

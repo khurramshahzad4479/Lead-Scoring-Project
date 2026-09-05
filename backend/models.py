@@ -64,7 +64,7 @@ class Event(Base):
     lead_id = Column(Integer, index=True)
     event = Column(String(50), index=True, nullable=False)
     props = Column(JSONB, default=dict)
-    url = Column(Text)s
+    url = Column(Text)
     referrer = Column(Text)
     utm_source = Column(String(100))
     created_at = Column(DateTime(timezone=True), server_default=func.now())    

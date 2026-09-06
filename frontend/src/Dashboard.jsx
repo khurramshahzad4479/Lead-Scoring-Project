@@ -17,7 +17,7 @@ function PieChart({ hot, cold }) {
   const total = hot + cold || 1
   const hotPercent = (hot / total) * 100
   const coldPercent = (cold / total) * 100
-  
+
   return (
     <svg width="100" height="100" viewBox="0 0 36 36">
       <circle cx="18" cy="18" r="15.9" fill="none" stroke="#334155" strokeWidth="3" />
@@ -54,23 +54,13 @@ function Dashboard({ token, username, onLogout }) {
   const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState([])
 
-  useEffect(() => {
-    if (!token) return
-    const load = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/events/recent`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        if (res.status === 401) { onLogout(); return }
-        if (res.ok) setEvents(await res.json())
-      } catch (err) { /* backend asleep / network glitch — next 5s tick retry */ }
-    }
-    load()
-    const t = setInterval(load, 5000)
-    return () => clearInterval(t)
-  }, [token])
+  const showMsg = (text, type = 'info') => {
+    setMsg(String(text))
+    setMsgType(type)
+    setTimeout(() => setMsg(''), 5000)
+  }
 
   const fetchLeads = async () => {
     setFetching(true)
@@ -83,11 +73,26 @@ function Dashboard({ token, username, onLogout }) {
     } finally { setFetching(false) }
   }
 
-  const showMsg = (text, type = 'info') => {
-    setMsg(String(text))
-    setMsgType(type)
-    setTimeout(() => setMsg(''), 5000)
-  }
+  // ============================================================
+  useEffect(() => { if (token) fetchLeads() }, [token])
+  // ============================================================
+
+  // Events polling — ever 5 second
+  useEffect(() => {
+    if (!token) return
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/events/recent`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.status === 401) { onLogout(); return }
+        if (res.ok) setEvents(await res.json())
+      } catch (err) { /* backend asleep — next 5s tick retry */ }
+    }
+    load()
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
+  }, [token])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -242,7 +247,7 @@ function Dashboard({ token, username, onLogout }) {
             </table>
           )}
         </div>
-      </div> {/* ← End of 2-column grid */}
+      </div>
 
       {/* ── LIVE EVENTS FEED ── */}
       <div style={{ ...s.card, marginTop: '24px' }}>
@@ -284,7 +289,7 @@ function Dashboard({ token, username, onLogout }) {
         )}
       </div>
 
-    </div> /* ← End of main container */
+    </div>
   )
 }
 

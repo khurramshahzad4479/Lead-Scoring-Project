@@ -1,382 +1,81 @@
-Lead Scoring Pro - ML Powered Lead Management System
+🔥 Lead Scoring Pro
+ML-powered lead scoring system that predicts Hot / Cold leads using a RandomForest model trained on the X Education leads dataset (65 one-hot features). Includes a custom-built live event tracking system — behavioral data (visits, time on site, page views, UTM attribution) is captured first-party in our own database and feeds directly into scoring.
 
-An intelligent lead scoring system that uses Machine Learning to predict lead conversion probability. Built with FastAPI, React, and scikit-learn.
+🌐 Live URLs
+Service	URL
+Frontend (Dashboard)	https://lead-scoring-4479-frontend.onrender.com
+Backend (FastAPI)	https://lead-scoring-4479-backend.onrender.com
+Lead Form (Public)	https://lead-scoring-4479-form.onrender.com
+Repository	github.com/khurramshahzad4479/Lead-Scoring-Project
+🛠 Tech Stack
+Backend: FastAPI 0.109 (Docker, Render) · scikit-learn 1.3.2 · JWT auth
+Frontend: React 18.2 + Vite (dark-themed dashboard, live polling)
+Database: PostgreSQL (Supabase, ap-southeast-2) via SQLAlchemy
+Form: Static HTML + custom first-party tracking script (no GA4/Mixpanel)
+Keep-alive: cron-job.org pings /health every 10 min (Render free tier)
+✨ Features
+1. ML Lead Scoring
+RandomForest model (real_model.pkl + model_columns.pkl, 65 one-hot features)
+Predicts Hot 🔥 / Cold ❄️ per lead, saved to DB
+Duplicate leads are updated + re-scored (not skipped) — new form submissionsoverwrite name, source, behavior data, occupation, and prediction
+2. Live Event Tracking (first-party)
+page_view, page_exit (time_on_page + scroll_depth), form_start, field_focus, form_submit events
+Session ID via localStorage (lspro_sid), UTM persistence (lspro_utm_*)
+Sent via navigator.sendBeacon (Blob type text/plain for cross-origin) with fetch keepalive fallback
+Events linked to lead_id on form submit
+Dashboard shows a 📡 Live Events Feed (last 25 events, 5s auto-refresh)
+3. Behavioral Scoring (server-side, authoritative)
+30-min gap rule for counting visits (GA standard)
+5s dedupe for rapid page_views
+Time on page capped at 3600s per exit
+UTM/referrer → valid X Education Lead Source categories (see mapping below)
+Client-side values used only as fallback
+4. UTM / Lead Source Attribution
+Incoming signal	Mapped Lead Source
+utm_medium in cpc/ppc/paid/ads	Pay per Click Ads
+utm_source google/googleads/adwords	Google
+utm_source bing / blog / youtube	bing / blog / youtubechannel
+utm_source facebook/fb/instagram/ig	Facebook
+utm_source linkedin/twitter/tiktok/…	Social Media
+Search engine referrer	Organic Search
+Social site referrer	Social Media
+Any other referrer	Referral Sites
+Nothing	Direct Traffic
+All mapped values are verified against model_columns.pkl — every category is a real one-hot feature in the model.
 
-Python 3.11
-
-FasAPI 0.109.0
-
-React 18.2.0
-
-sckitlearn 1.3.2
-
-Supabase F2S4C4
-
-Render
-
-
-Features
-
-ML Prediction - RandomForest classifier predicts Hot/Cold leads
-
-Real-time Dashboard - Live statistics with pie chart
-
-Webhook Integration - Auto-capture leads from any website
-
-Authentication - Secure login/register with JWT
-
-Database - PostgreSQL with SQLAlchemy ORM
-
-Auto-tracking - Source, visits, time spent auto-captured
-
-Professional UI - Clean, modern dark theme
-
-
-Tech Stack
-
-Layer	        Technology
-
-Frontend	React 18, Vite, Inline Styles
-
-Backend	        FastAPI, Uvicorn
-
-Database	PostgreSQL (Supabase)
-
-ML Model	scikit-learn (Random Forest)
-
-Authentication	JWT, bcrypt
-
-Deployment	Render (Docker)
-
-
-
-📁*Project Structure
-
-lead-scoring-project/
-
+🔌 API Endpoints
+Method	Endpoint	Auth	Description
+GET	/health	—	Health check (cron ping target)
+POST	/register, /login	—	JWT auth
+GET	/me	JWT	Current user
+GET	/leads/	JWT	All leads (incl. source, behavior fields)
+POST	/predict-lead	JWT	Dashboard form → predict, save/update + re-score
+POST	/webhook/lead	—	Public form → behavior-based predict + save/update
+POST	/track	—	Event beacons (text/plain, whitelist, s_ prefix check)
+GET	/events/recent	JWT	Last 25 events (dashboard feed)
+📁 Project Structure
 ├── backend/
-
-│ ├── main.py # FastAPI app
-
-│ ├── models.py # SQLAlchemy models
-
-│ ├── scoring.py # ML prediction
-
-│ ├── train_model.py # Model training script
-
-│ ├── requirements.txt # Python dependencies
-
-│ ├── Dockerfile # Docker config
-
-│ ├── .dockerignore
-
-│ ├── real_model.pkl # Trained ML model
-
-│ ├── model_columns.pkl # Model feature names
-
-│ └── .env # Environment variables (gitignored)
-
-│
-
+│ ├── main.py # endpoints, tracking, webhook, mapping
+│ ├── models.py # User, Lead, Event (JSONB props)
+│ ├── real_model.pkl # trained RandomForest
+│ └── model_columns.pkl# 65 feature columns
 ├── frontend/
-
-│ ├── package.json
-
-│ ├── vite.config.js
-
-│ ├── index.html
-
 │ └── src/
-
-│ ├── main.jsx
-
-│ ├── App.jsx
-
-│ ├── index.css
-
-│ └── components/
-
-│ ├── Login.jsx
-
-│ └── Dashboard.jsx
-
-│
-
-├── form/
-
-│ └── index.html # Public customer form
-
-│
-
-├── .gitignore
-
-├── .gitattributes
-
-└── README.md
-
-
-
-## 🚀 Quick Start (Local Development)
-
-### Prerequisites
-
-- Python 3.11+
-
-- Node.js 18+
-
-- Supabase account
-
-
-
-\### 1. Clone Repository
-
-```bash
-
-git clone https://github.com/khurramshahzad4479/Lead-Scoring-Project
-
-cd lead_scoring_project testing/backend
-
-
-
-2. Setup Environment
-
-python -m venv venv
-
-venv\\Scripts\\activate  # Windows
-
-source venv/bin/activate  # Mac/Linux
-
-pip install -r requirements.txt
-
-
-
-3. Setup Database
-
-Create project on Supabase
-
-Run SQL from backend/setup\_db.sql in SQL Editor
-
-Update backend/.env with your database credentials
-
-
-
-4. Train ML Model (First time only)
-
-python train\_model.py
-
-
-5. Run Backend
-
-uvicorn main:app --reload
-
-6. Run Frontend
-
-cd ../frontend
-
-npm install
-
-npm run dev
-
-Access:
-
-Frontend: http://localhost:5173
-
-Backend API: http://localhost:8000
-
-API Docs: http://localhost:8000/docs
-
-
-🌐 Deployment (Render)
-
-**Prerequisites**
-
-* GitHub account
-* Render account (free tier available)
-* Supabase database already set up
-
-Backend (Docker)
-
-1. Go to Render.com
-
-2. New > Web Service > GitHub repo
-
-3. Settings:
-
-Root Directory: backend
-
-Runtime: Docker
-
-Build: pip install -r requirements.txt
-
-Start: uvicorn main:app --host 0.0.0.0 --port $PORT
-
-
-4. Add environment variables:
-
-DB_HOST=your-db-host.pooler.supabase.co
-
-DB_PORT=6543
-
-DB_NAME=postgres
-
-DB_USER=postgres.project\_id
-
-DB_PASS=your-password
-
-SECRET_KEY=your-secret-key
-
-ALGORITHM=HS256
-
-
-
-Frontend (Static Site)
-
-1. Update API URL in frontend/src/Login.jsx and frontend/src/Dashboard.jsx:
-
-javascript
-
-const API_BASE = 'https://lead-scoring-4479-backend.onrender.com'
-
-2. New > Static Site > GitHub repo
-
-3. Root Directory: frontend
-
-4. Build: npm install && npm run build
-
-5. Publish Directory: dist
-
-
-
-Customer Form (Static Site)
-
-
-
-1. New > Static Site > GitHub repo
-
-2. Root Directory: form
-
-3. Build Command: (empty)
-
-4. Publish Directory: .
-
-5. URL: https://lead-scoring-4479-frontend.onrender.com
-
-
-
-📡 API Endpoints
-
-
-
-Method       Endpoint        Auth Required          Description
-
-
-GET	         /health	        ❌	                Health check       
-
-POST	    /register	        ❌	                Create user
-
-POST	    /login	            ❌	                Get JWT token
-
-GET	        /leads/	            ✅	                Get all leads
-
-POST	    /predict-lead	    ✅	                ML prediction + Save lead
-
-POST	    /webhook/lead	    ❌	                Public webhook for forms
-
-DELETE	    /leads/{id}	        ✅	                Delete a lead
-
-
-
-📱 Customer Form Integration
-
-
-
-
-
-https://lead-scoring-4479-form.onrender.com
-
-
-
-🔐 How It Works
-
-
-
-┌──────────┐     ┌──────────┐     ┌──────────┐
-
-│  Website │────>│  Form    │────>│ Backend │
-
-│  Ad/Social │     │  Submit │     │ API     │
-
-└──────────┘     └──────────┘     └────┬───┘
-
-                                        │
-
-                                        ▼
-
-                                 ┌──────────┐
-
-                                 │   ML Model   │
-
-                                 └──────────┘
-
-                                        │
-
-                             ┌─────────────────────┐
-
-                             │    Hot Lead 🔥        │
-
-                             │    OR               │
-
-                             │    Cold Lead ❄️      │
-
-                             └─────────────────────┘
-
-                                        │
-
-                             ┌──────────┐
-
-                             │ Dashboard │
-
-                             │ + Pie Chart │
-
-                             │ + Table    │
-
-                             └──────────┘
-
-🛠️ Troubleshooting
-
-Database Connection Failed
-
-* Check .env file exists with correct Supabase credentials
-* Use Transaction pooler connection string (port 6543)
-* Ensure SSL mode is enabled
-
-CORS Error
-
-* Ensure allow\_origins includes frontend URL
-* Use direct CORS headers in endpoint
-
-
-Model Version Warning
-
-* Retrain model with current scikit-learn version
-* Both versions must match
-
-
-
-Port 8000 not working (Render)
-
-
-
-* Use $PORT in Dockerfile CMD
-* Check Render environment variables
-
-📱 License
-
-This project is open source under the MIT License.
-
-📧 Contact
-
-GitHub: Lead-Scoring-Pro
-
-Built with ❤️ using Python, React, FastAPI, scikit-learn, and Supabase
-
+│ ├── config.js # ⭐ API_BASE — single source of truth
+│ ├── Dashboard.jsx# stats, add-lead form, leads table, live events feed
+│ └── Login.jsx
+└── form/
+└── index.html # public form + tracking script
+
+
+---
+
+## 🧪 Testing Guide
+
+1. Open the form (use **Incognito** for fresh sessions)
+2. Scroll, focus fields, submit with a new email
+3. Login to the dashboard → lead appears with Hot/Cold + source
+4. Events appear in Live Events Feed within 5s
+5. **UTM test:** `?utm_source=facebook&utm_medium=cpc` → "Pay per Click Ads"; 
+   without medium → "Facebook"; no UTM → "Direct Traffic"
+6. **Duplicate test:** resubmit an existing email → lead updates + re-scores

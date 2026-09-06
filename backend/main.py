@@ -110,7 +110,7 @@ def compute_behavior(db, session_id: str):
     if not views:
         return None
 
-    # 1) Rapid duplicates hatao (double tab / double script, <5s gap)
+    # 1) Remove Rapid duplicates (double tab / double script, <5s gap)
     clean = [views[0]]
     for e in views[1:]:
         if e.created_at - clean[-1].created_at >= timedelta(seconds=5):
@@ -126,7 +126,8 @@ def compute_behavior(db, session_id: str):
         models.Event.session_id == session_id,
         models.Event.event == "page_exit",
     ).all()
-    # Har exit max 1 hour count karo (kholi chhori tab limits)
+
+    # Every exit count max 1 hour (open tab limits)
     time_spent = sum(min(int((e.props or {}).get("time_on_page") or 0), 3600) for e in exits)
 
     return {
@@ -139,7 +140,7 @@ def compute_behavior(db, session_id: str):
 
 @app.post("/track")
 async def track_event(request: Request, db: Session = Depends(get_db)):
-    # text/plain beacon support (sendBeacon cross-origin ke liye zaroori)
+    
     try:
         p = json.loads(await request.body())
     except Exception:
@@ -236,8 +237,27 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
         form_data = await request.json()
         ml_result = predict_real_lead(form_data)
         existing = db.query(models.Lead).filter(models.Lead.email == form_data.get("email")).first()
+
         if existing:
-            return {"message": f"Prediction: {ml_result} (Email exists)", "prediction": ml_result, "saved": False}
+            # ── DUPLICATE LEAD → UPDATE + RE-SCORE ──
+            existing.name = form_data.get("name") or existing.name
+            existing.lead_origin = form_data.get("Lead Origin") or existing.lead_origin
+            existing.total_visits = int(form_data.get("TotalVisits", existing.total_visits or 0))
+            existing.time_spent = int(form_data.get("Total Time Spent on Website", existing.time_spent or 0))
+            existing.page_views = float(form_data.get("Page Views Per Visit", existing.page_views or 0))
+            existing.occupation = form_data.get("What is your current occupation") or existing.occupation
+            existing.is_converted = "Hot" in ml_result
+            if form_data.get("Lead Source"):
+                existing.source = form_data.get("Lead Source")
+            db.commit()
+            db.refresh(existing)
+            return {
+                "message": f"{existing.name} - {ml_result} (updated & re-scored)",
+                "prediction": ml_result,
+                "saved": True,
+                "updated_existing": True
+            }
+
         new_lead = models.Lead(
             name=form_data.get("name"),
             email=form_data.get("email"),
@@ -268,7 +288,7 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
 
         session_id = (data.get("session_id") or "").strip()
 
-        # --- Behavioral data:  (authoritative) from events, otherwise fallback ---
+        # --- Behavioral data: (authoritative) from events, otherwise fallback ---
         behavior = compute_behavior(db, session_id) if session_id else None
         total_visits = behavior["TotalVisits"] if behavior else int(data.get("visits", 0) or 0)
         time_spent = behavior["Total Time Spent on Website"] if behavior else int(data.get("time_spent", 0) or 0)
@@ -296,7 +316,27 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
 
         existing = db.query(models.Lead).filter(models.Lead.email == email).first()
         if existing:
-            return {"status": "duplicate", "prediction": ml_result}
+            # ── DUPLICATE LEAD → UPDATE + RE-SCORE 
+            existing.name = name or existing.name
+            existing.lead_origin = lead_origin
+            existing.source = lead_source
+            existing.total_visits = total_visits
+            existing.time_spent = time_spent
+            existing.page_views = page_views
+            existing.occupation = data.get("occupation") or existing.occupation
+            existing.is_converted = "Hot" in ml_result
+            db.commit()
+            db.refresh(existing)
+
+            # New (un-linked) events also link to this lead if session_id is present
+            if session_id:
+                db.query(models.Event).filter(
+                    models.Event.session_id == session_id,
+                    models.Event.lead_id.is_(None)
+                ).update({"lead_id": existing.id}, synchronize_session=False)
+                db.commit()
+
+            return {"status": "updated", "prediction": ml_result, "message": f"{name} - {ml_result} (updated & re-scored)"}
 
         new_lead = models.Lead(
             name=name, email=email,

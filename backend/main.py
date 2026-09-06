@@ -241,6 +241,7 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
         new_lead = models.Lead(
             name=form_data.get("name"),
             email=form_data.get("email"),
+            source=form_data.get("Lead Source"),
             lead_origin=form_data.get("Lead Origin"),
             total_visits=int(form_data.get("TotalVisits", 0)),
             time_spent=int(form_data.get("Total Time Spent on Website", 0)),
@@ -267,7 +268,7 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
 
         session_id = (data.get("session_id") or "").strip()
 
-        # --- Behavioral data: events se (authoritative), warna client fallback ---
+        # --- Behavioral data:  (authoritative) from events, otherwise fallback ---
         behavior = compute_behavior(db, session_id) if session_id else None
         total_visits = behavior["TotalVisits"] if behavior else int(data.get("visits", 0) or 0)
         time_spent = behavior["Total Time Spent on Website"] if behavior else int(data.get("time_spent", 0) or 0)
@@ -309,7 +310,7 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_lead)
 
-        # Events ko lead se link karo
+        # Link events to this lead if session_id is present
         if session_id:
             db.query(models.Event).filter(
                 models.Event.session_id == session_id,

@@ -223,6 +223,7 @@ function Dashboard({ token, username, onLogout }) {
                   <th style={{ ...s.th, width: '60px' }}>ID</th>
                   <th style={s.th}>Name</th>
                   <th style={s.th}>Email</th>
+                  <th style={s.th}>Source</th>
                   <th style={{ ...s.th, width: '110px' }}>Status</th>
                 </tr>
               </thead>
@@ -232,6 +233,9 @@ function Dashboard({ token, username, onLogout }) {
                     <td style={{ ...s.td, color: '#e2e7ee' }}>{l.id}</td>
                     <td style={{ ...s.td, fontWeight: '500', color: '#e2e8f0' }}>{l.name}</td>
                     <td style={{ ...s.td, color: '#e8ebef' }}>{l.email}</td>
+                    <td style={{ ...s.td, color: '#94a3b8', fontSize: '12px' }}>
+                              {l.lead_source || l['Lead Source'] || '—'}
+                    </td> 
                     <td style={s.td}>
                       <span style={{
                         ...s.badge,

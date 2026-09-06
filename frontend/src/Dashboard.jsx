@@ -31,6 +31,22 @@ function PieChart({ hot, cold }) {
   )
 }
 
+const EVENT_META = {
+  page_view:   { icon: '👁', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' },
+  page_exit:   { icon: '🚪', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
+  form_start:  { icon: '✏️', color: '#facc15', bg: 'rgba(250,204,21,0.15)' },
+  field_focus: { icon: '🖱', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+  form_submit: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' }
+}
+
+const eventDetail = (e) => {
+  if (e.event === 'field_focus') return e.props?.field || ''
+  if (e.event === 'page_exit') return `${e.props?.time_on_page ?? '?'}s on page · ${e.props?.scroll_depth ?? 0}% scrolled`
+  if (e.event === 'page_view') return 'opened the form page'
+  if (e.event === 'form_submit') return 'form submitted'
+  return ''
+}
+
 function Dashboard({ token, username, onLogout }) {
   const [leads, setLeads] = useState([])
   const [msg, setMsg] = useState('')
@@ -40,19 +56,21 @@ function Dashboard({ token, username, onLogout }) {
   const [fetching, setFetching] = useState(true)
   const [events, setEvents] = useState([]);
 
-  useEffect(() => { if (token) fetchLeads() }, [token])
   useEffect(() => {
-  const load = async () => {
-    const res = await fetch(`${API_BASE}/events/recent`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) setEvents(await res.json());
-  };
-  load();
-  const t = setInterval(load, 5000);
-  return () => clearInterval(t);
-}, []);
-// render: events.map(e => <div>{e.created_at?.slice(11,19)} — {e.event} {e.url}</div>)  
+    if (!token) return
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/events/recent`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.status === 401) { onLogout(); return }
+        if (res.ok) setEvents(await res.json())
+      } catch (err) { /* backend asleep / network glitch — next 5s tick retry */ }
+    }
+    load()
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
+  }, [token])
 
   const fetchLeads = async () => {
     setFetching(true)
@@ -61,8 +79,7 @@ function Dashboard({ token, username, onLogout }) {
       setLeads((res.data.data || []).reverse())
     } catch (err) {
       if (err.response?.status === 401) { onLogout(); return }
-      setMsg('Failed to fetch leads')
-      setMsgType('error')
+      showMsg('Failed to fetch leads', 'error')
     } finally { setFetching(false) }
   }
 
@@ -225,8 +242,49 @@ function Dashboard({ token, username, onLogout }) {
             </table>
           )}
         </div>
+      </div> {/* ← End of 2-column grid */}
+
+      {/* ── LIVE EVENTS FEED ── */}
+      <div style={{ ...s.card, marginTop: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📡 Live Events Feed</h3>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#22c55e', fontSize: '12px', fontWeight: '600' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+            LIVE · refreshes every 5s
+          </span>
+        </div>
+
+        {events.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#64748b' }}>
+            <p style={{ fontSize: '16px', margin: 0 }}>⏳ No events yet</p>
+            <p style={{ fontSize: '13px', marginTop: '6px' }}>Open the lead form in another tab and scroll / fill it</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto' }}>
+            {events.map((e, i) => {
+              const meta = EVENT_META[e.event] || { icon: '⚡', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' }
+              return (
+                <div key={`${e.created_at}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                  <span style={{ color: '#64748b', fontSize: '12px', fontFamily: 'monospace', minWidth: '64px' }}>
+                    {e.created_at ? new Date(e.created_at).toLocaleTimeString('en-GB', { hour12: false }) : '--:--:--'}
+                  </span>
+                  <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', color: meta.color, background: meta.bg, whiteSpace: 'nowrap' }}>
+                    {meta.icon} {e.event}
+                  </span>
+                  <span style={{ color: '#94a3b8', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {eventDetail(e)}
+                  </span>
+                  <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '11px', fontFamily: 'monospace' }}>
+                    {(e.session_id || '').slice(0, 12)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
-    </div>
+
+    </div> /* ← End of main container */
   )
 }
 

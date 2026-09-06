@@ -67,9 +67,6 @@ GET	/events/recent	JWT	Last 25 events (dashboard feed)
 └── form/
 └── index.html # public form + tracking script
 
-
----
-
 ## 🧪 Testing Guide
 
 1. Open the form (use **Incognito** for fresh sessions)

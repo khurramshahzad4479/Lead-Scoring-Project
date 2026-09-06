@@ -132,9 +132,9 @@ lead-scoring-project/
 
 ```bash
 
-git clone https://github.com/khurramks1111-vibe/Lead-Scoring-Pro.git
+git clone https://github.com/khurramshahzad4479/Lead-Scoring-Project
 
-cd Lead-Scoring-Pro/backend
+cd lead_scoring_project testing/backend
 
 
 
@@ -235,7 +235,7 @@ Frontend (Static Site)
 
 javascript
 
-const API_BASE = 'https://your-backend.onrender.com'
+const API_BASE = 'https://lead-scoring-4479-backend.onrender.com'
 
 2. New > Static Site > GitHub repo
 
@@ -259,7 +259,7 @@ Customer Form (Static Site)
 
 4. Publish Directory: .
 
-5. URL: https://your-form.onrender.com
+5. URL: https://lead-scoring-4479-frontend.onrender.com
 
 
 
@@ -292,7 +292,7 @@ DELETE	    /leads/{id}	        ✅	                Delete a lead
 
 
 
-https://your-form.onrender.com
+https://lead-scoring-4479-form.onrender.com
 
 
 

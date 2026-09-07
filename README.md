@@ -85,4 +85,8 @@ ML-powered lead scoring system that predicts **Hot / Cold** leads using a Random
 3. Login to the dashboard → lead appears with Hot/Cold + source
 4. Events appear in Live Events Feed within 5s
 5. **UTM test:** ?utm_source=facebook&utm_medium=cpc → "Pay per Click Ads"; without medium → "Facebook"; no UTM → "Direct Traffic"
+<<<<<<< HEAD
 6. **Duplicate test:** resubmit an existing email → lead updates + re-scores
+=======
+6. **Duplicate test:** resubmit an existing email → lead updates + re-scores
+>>>>>>> 81f7adc436a102f05b9b5bcbe38c7b954dc3ce0f

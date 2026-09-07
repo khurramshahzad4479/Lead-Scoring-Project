@@ -153,11 +153,11 @@ document.getElementById('leadForm').addEventListener('submit', async function (e
     });
     var out = await res.json();
     if (!res.ok) throw new Error(out.detail || 'Error');
-    msg.textContent = out.status === 'duplicate'
-      ? 'Your request has already been submitted. We will get back to you soon!'
+        msg.textContent = out.status === 'updated'
+      ? 'You have already reached out to us — your latest details have been saved. We will get back to you soon!'
       : 'Thank you! Your request has been received. We will get back to you soon.';
     msg.classList.add('ok');
-    if (out.status !== 'duplicate') e.target.reset();
+    e.target.reset();
   } catch (err) {
     msg.textContent = 'Something went wrong. Please try again.';
     msg.classList.add('err');

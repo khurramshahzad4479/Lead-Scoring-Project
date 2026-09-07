@@ -11,7 +11,6 @@ import json
 from dotenv import load_dotenv
 import models
 from scoring import predict_real_lead
-from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -70,7 +69,7 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise credentials_exception
     return user
 
-# ================= LIVE TRACKING (naya) =================
+# ================= LIVE TRACKING =================
 
 ALLOWED_EVENTS = {"page_view", "page_exit", "form_start", "field_focus", "form_submit"}
 
@@ -140,7 +139,6 @@ def compute_behavior(db, session_id: str):
 
 @app.post("/track")
 async def track_event(request: Request, db: Session = Depends(get_db)):
-    
     try:
         p = json.loads(await request.body())
     except Exception:
@@ -235,7 +233,7 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user: model
 async def predict_lead(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         form_data = await request.json()
-        ml_result = predict_real_lead(form_data)
+        result = predict_real_lead(form_data)
         existing = db.query(models.Lead).filter(models.Lead.email == form_data.get("email")).first()
 
         if existing:
@@ -246,14 +244,16 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
             existing.time_spent = int(form_data.get("Total Time Spent on Website", existing.time_spent or 0))
             existing.page_views = float(form_data.get("Page Views Per Visit", existing.page_views or 0))
             existing.occupation = form_data.get("What is your current occupation") or existing.occupation
-            existing.is_converted = "Hot" in ml_result
+            existing.is_converted = result["is_hot"]         
+            existing.confidence = result["confidence"]        # ← ADDED
             if form_data.get("Lead Source"):
                 existing.source = form_data.get("Lead Source")
             db.commit()
             db.refresh(existing)
             return {
-                "message": f"{existing.name} - {ml_result} (updated & re-scored)",
-                "prediction": ml_result,
+                "message": f"{existing.name} - {result['label']} (updated & re-scored)",
+                "prediction": result["label"],                # ← FIXED (was whole dict)
+                "confidence": result["confidence"],           # ← ADDED
                 "saved": True,
                 "updated_existing": True
             }
@@ -267,12 +267,18 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
             time_spent=int(form_data.get("Total Time Spent on Website", 0)),
             page_views=float(form_data.get("Page Views Per Visit", 0)),
             occupation=form_data.get("What is your current occupation"),
-            is_converted="Hot" in ml_result
+            is_converted=result["is_hot"],                   
+            confidence=result["confidence"],                  # ← ADDED
         )
         db.add(new_lead)
         db.commit()
         db.refresh(new_lead)
-        return {"message": f"{new_lead.name} - {ml_result}", "prediction": ml_result, "saved": True}
+        return {
+            "message": f"{new_lead.name} - {result['label']}",
+            "prediction": result["label"],                    # ← FIXED
+            "confidence": result["confidence"],               # ← ADDED
+            "saved": True,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -312,11 +318,11 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
             "Page Views Per Visit": page_views,
         }
 
-        ml_result = predict_real_lead(form_for_ml)
+        result = predict_real_lead(form_for_ml)
 
         existing = db.query(models.Lead).filter(models.Lead.email == email).first()
         if existing:
-            # ── DUPLICATE LEAD → UPDATE + RE-SCORE 
+            # ── DUPLICATE LEAD → UPDATE + RE-SCORE ──
             existing.name = name or existing.name
             existing.lead_origin = lead_origin
             existing.source = lead_source
@@ -324,7 +330,8 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
             existing.time_spent = time_spent
             existing.page_views = page_views
             existing.occupation = data.get("occupation") or existing.occupation
-            existing.is_converted = "Hot" in ml_result
+            existing.is_converted = result["is_hot"]
+            existing.confidence = result["confidence"]        # ← ADDED
             db.commit()
             db.refresh(existing)
 
@@ -336,7 +343,12 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
                 ).update({"lead_id": existing.id}, synchronize_session=False)
                 db.commit()
 
-            return {"status": "updated", "prediction": ml_result, "message": f"{name} - {ml_result} (updated & re-scored)"}
+            return {
+                "status": "updated",
+                "prediction": result["label"],                # ← FIXED
+                "confidence": result["confidence"],           # ← ADDED
+                "message": f"{name} - {result['label']} (updated & re-scored)"
+            }
 
         new_lead = models.Lead(
             name=name, email=email,
@@ -344,7 +356,8 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
             total_visits=total_visits, time_spent=time_spent,
             page_views=page_views,
             occupation=data.get("occupation") or "Unknown",
-            is_converted="Hot" in ml_result,
+            is_converted=result["is_hot"],
+            confidence=result["confidence"],
         )
         db.add(new_lead)
         db.commit()
@@ -358,7 +371,12 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
             ).update({"lead_id": new_lead.id}, synchronize_session=False)
             db.commit()
 
-        return {"status": "success", "prediction": ml_result, "message": f"{name} - {ml_result}"}
+        return {
+            "status": "success",
+            "prediction": result["label"],                    # ← FIXED
+            "confidence": result["confidence"],               # ← ADDED
+            "message": f"{name} - {result['label']}"
+        }
     except HTTPException:
         raise
     except Exception as e:

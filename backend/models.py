@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, func 
+from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, Float, func 
 
 load_dotenv()
 
@@ -38,6 +38,7 @@ class Lead(Base):
     source = Column(String(50), default="Website")
     budget = Column(Float, default=0.0)
     is_converted = Column(Boolean, default=False)
+    confidence = Column(Float, nullable=True)
     location = Column(String(255))
     lead_origin = Column(String(255))
     total_visits = Column(Integer, default=0)

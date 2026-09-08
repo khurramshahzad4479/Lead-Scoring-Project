@@ -46,6 +46,15 @@ const eventDetail = (e) => {
   return ''
 }
 
+// Color bands for model confidence (P-convert)
+const scoreColor = (conf) => {
+  if (conf == null) return '#64748b'    // Null — not computed
+  if (conf >= 0.70) return '#ef4444'   // Strong Hot
+  if (conf >= 0.55) return '#f87171'   // Leaning Hot
+  if (conf >= 0.45) return '#facc15'   // Borderline — 50%  near threshold
+  return '#22c55e'                     // Cold side
+}
+
 function Dashboard({ token, username, onLogout }) {
   const [leads, setLeads] = useState([])
   const [msg, setMsg] = useState('')
@@ -98,7 +107,10 @@ function Dashboard({ token, username, onLogout }) {
     setLoading(true)
     try {
       const res = await axios.post(`${API_BASE}/predict-lead`, form, { headers: { 'Authorization': `Bearer ${token}` } })
-      showMsg(res.data.message, 'success')
+            const score = res.data.confidence != null
+        ? ` — Score: ${Math.round(res.data.confidence * 100)}%`
+        : ''
+      showMsg(`${res.data.message}${score}`, 'success')
       setForm(INITIAL_FORM)
       fetchLeads()
     } catch (err) {
@@ -223,6 +235,7 @@ function Dashboard({ token, username, onLogout }) {
                   <th style={s.th}>Name</th>
                   <th style={s.th}>Email</th>
                   <th style={s.th}>Source</th>
+                  <th style={{ ...s.th, width: '90px' }}>Score</th>
                   <th style={{ ...s.th, width: '110px' }}>Status</th>
                 </tr>
               </thead>
@@ -234,6 +247,14 @@ function Dashboard({ token, username, onLogout }) {
                     <td style={{ ...s.td, color: '#e8ebef' }}>{l.email}</td>
                     <td style={{ ...s.td, color: '#94a3b8', fontSize: '12px' }}>
                               {l.source || '—'}
+                    </td>
+                                        <td style={{ ...s.td, fontFamily: 'monospace' }}>
+                      <span
+                        style={{ color: scoreColor(l.confidence), fontWeight: '600' }}
+                        title="Model confidence — probability of conversion"
+                      >
+                        {l.confidence != null ? `${Math.round(l.confidence * 100)}%` : '—'}
+                      </span>
                     </td> 
                     <td style={s.td}>
                       <span style={{

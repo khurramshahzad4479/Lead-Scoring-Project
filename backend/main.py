@@ -225,6 +225,8 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user: model
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found!")
+    # Lead ke linked events pehle delete (FK-safe), phir lead
+    db.query(models.Event).filter(models.Event.lead_id == lead_id).delete(synchronize_session=False)
     db.delete(lead)
     db.commit()
     return {"message": "Lead deleted!"}

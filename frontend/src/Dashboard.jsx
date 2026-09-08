@@ -118,6 +118,42 @@ function Dashboard({ token, username, onLogout }) {
     } finally { setLoading(false) }
   }
 
+    const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete ${name} (ID ${id})? This also deletes its tracked events.`)) return
+    try {
+      await axios.delete(`${API_BASE}/leads/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+      showMsg(`Lead ${id} deleted`, 'success')
+      fetchLeads()
+    } catch (err) {
+      if (err.response?.status === 401) { onLogout(); return }
+      showMsg(err.response?.data?.detail || 'Delete failed', 'error')
+    }
+  }
+
+  const exportCSV = () => {
+    if (leads.length === 0) { showMsg('No leads to export', 'error'); return }
+    const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+    const rows = [
+      ['ID', 'Name', 'Email', 'Source', 'Lead Origin', 'Visits', 'Time Spent (s)', 'Page Views/Visit', 'Occupation', 'Score %', 'Status', 'Created (local)'],
+      ...leads.map(l => [
+        l.id, l.name, l.email, l.source, l.lead_origin,
+        l.total_visits, l.time_spent, l.page_views, l.occupation,
+        l.confidence != null ? Math.round(l.confidence * 100) : '',
+        l.is_converted ? 'Hot' : 'Cold',
+        l.created_at ? new Date(l.created_at).toLocaleString() : ''
+      ])
+    ]
+    const csv = rows.map(r => r.map(esc).join(',')).join('\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    showMsg(`Exported ${leads.length} leads`, 'success')
+  }
+
   const hotCount = leads.filter(l => l.is_converted).length
   const coldCount = leads.length - hotCount
 
@@ -219,7 +255,16 @@ function Dashboard({ token, username, onLogout }) {
         </div>
 
         <div style={s.card}>
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}> Recent Leads</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Recent Leads</h3>
+            <button
+              onClick={exportCSV}
+              disabled={leads.length === 0}
+              style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #475569', color: '#e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+            >
+              ⬇ Export CSV
+            </button>
+          </div>
           {fetching ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}> Loading...</div>
           ) : leads.length === 0 ? (
@@ -237,6 +282,7 @@ function Dashboard({ token, username, onLogout }) {
                   <th style={s.th}>Source</th>
                   <th style={{ ...s.th, width: '90px' }}>Score</th>
                   <th style={{ ...s.th, width: '110px' }}>Status</th>
+                  <th style={{ ...s.th, width: '70px' }}>Del</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,6 +310,14 @@ function Dashboard({ token, username, onLogout }) {
                       }}>
                         {l.is_converted ? ' Hot' : ' Cold'}
                       </span>
+                    </td>
+                      <td style={{ ...s.td, textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleDelete(l.id, l.name)}
+                        title={`Delete ${l.name || 'lead'}`}
+                        style={{ background: 'transparent', border: '1px solid #475569', color: '#94a3b8', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+                      >
+                      </button>
                     </td>
                   </tr>
                 ))}

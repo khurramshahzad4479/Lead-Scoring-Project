@@ -27,7 +27,7 @@ app.add_middleware(
                    "https://lead-scoring-4479-form.onrender.com",
                    "http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
@@ -184,6 +184,10 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
 
+# Pydantic model for status update payload
+class StatusUpdate(BaseModel):
+    status: str
+
 @app.get("/health")
 def health_check():
     try:
@@ -220,12 +224,44 @@ def get_leads(db: Session = Depends(get_db), current_user: models.User = Depends
     leads = db.query(models.Lead).order_by(models.Lead.created_at.desc()).all()
     return {"total_leads": len(leads), "data": leads}
 
+@app.patch("/api/leads/{lead_id}/status")
+async def update_lead_status(
+    lead_id: int, 
+    payload: StatusUpdate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Valid statuses check
+    valid_statuses = ["New", "Contacted", "Qualified", "Lost"]
+    if payload.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    # Find lead
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Update status
+    lead.status = payload.status
+    
+    # Activity log event record
+    user_identifier = getattr(current_user, "email", None) or getattr(current_user, "username", "Unknown")
+    new_event = models.Event(
+        lead_id=lead.id,
+        event="status_change",
+        props={"new_status": payload.status, "changed_by": user_identifier}
+    )
+    db.add(new_event)
+    db.commit()
+
+    return {"message": "Status updated", "new_status": lead.status}
+
 @app.delete("/leads/{lead_id}")
 def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found!")
-    # Lead ke linked events pehle delete (FK-safe), phir lead
+    
     db.query(models.Event).filter(models.Event.lead_id == lead_id).delete(synchronize_session=False)
     db.delete(lead)
     db.commit()

@@ -51,7 +51,7 @@ const scoreColor = (conf) => {
   if (conf == null) return '#64748b'    // Null — not computed
   if (conf >= 0.70) return '#ef4444'   // Strong Hot
   if (conf >= 0.55) return '#f87171'   // Leaning Hot
-  if (conf >= 0.45) return '#facc15'   // Borderline — 50%  near threshold
+  if (conf >= 0.45) return '#facc15'   // Borderline — 50% near threshold
   return '#22c55e'                     // Cold side
 }
 
@@ -107,7 +107,7 @@ function Dashboard({ token, username, onLogout }) {
     setLoading(true)
     try {
       const res = await axios.post(`${API_BASE}/predict-lead`, form, { headers: { 'Authorization': `Bearer ${token}` } })
-            const score = res.data.confidence != null
+      const score = res.data.confidence != null
         ? ` — Score: ${Math.round(res.data.confidence * 100)}%`
         : ''
       showMsg(`${res.data.message}${score}`, 'success')
@@ -118,7 +118,7 @@ function Dashboard({ token, username, onLogout }) {
     } finally { setLoading(false) }
   }
 
-    const handleDelete = async (id, name) => {
+  const handleDelete = async (id, name) => {
     if (!window.confirm(`Delete ${name} (ID ${id})? This also deletes its tracked events.`)) return
     try {
       await axios.delete(`${API_BASE}/leads/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -130,12 +130,10 @@ function Dashboard({ token, username, onLogout }) {
     }
   }
 
-
-    // Status update handler
+  // Status update handler (Fixed: using prop 'token' instead of localStorage)
   const handleStatusChange = async (leadId, newStatus) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/leads/${leadId}/status`, {
+      const response = await fetch(`${API_BASE}/leads/${leadId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +281,7 @@ function Dashboard({ token, username, onLogout }) {
         </div>
 
         <div style={s.card}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Recent Leads</h3>
             <button
               onClick={exportCSV}
@@ -310,6 +308,7 @@ function Dashboard({ token, username, onLogout }) {
                   <th style={s.th}>Source</th>
                   <th style={{ ...s.th, width: '90px' }}>Score</th>
                   <th style={{ ...s.th, width: '110px' }}>Status</th>
+                  <th style={{ ...s.th, width: '110px' }}>Stage</th>
                   <th style={{ ...s.th, width: '70px' }}>Del</th>
                 </tr>
               </thead>
@@ -320,9 +319,9 @@ function Dashboard({ token, username, onLogout }) {
                     <td style={{ ...s.td, fontWeight: '500', color: '#e2e8f0' }}>{l.name}</td>
                     <td style={{ ...s.td, color: '#e8ebef' }}>{l.email}</td>
                     <td style={{ ...s.td, color: '#94a3b8', fontSize: '12px' }}>
-                              {l.source || '—'}
+                      {l.source || '—'}
                     </td>
-                                        <td style={{ ...s.td, fontFamily: 'monospace' }}>
+                    <td style={{ ...s.td, fontFamily: 'monospace' }}>
                       <span
                         style={{ color: scoreColor(l.confidence), fontWeight: '600' }}
                         title="Model confidence — probability of conversion"
@@ -340,29 +339,42 @@ function Dashboard({ token, username, onLogout }) {
                       </span>
                     </td>
 
-                    <td>
-  <select 
-    value={lead.status || 'New'} 
-    onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-    className="status-dropdown" // CSS class add kar sakte hain styling ke liye
-    style={{
-      padding: '4px',
-      borderRadius: '4px',
-      border: '1px solid #ccc',
-      backgroundColor: lead.status === 'New' ? '#e3f2fd' : 
-                       lead.status === 'Contacted' ? '#fff3e0' : 
-                       lead.status === 'Qualified' ? '#e8f5e9' : 
-                       lead.status === 'Lost' ? '#ffebee' : 'white',
-      cursor: 'pointer',
-      fontWeight: 'bold'
-    }}
-  >
-    <option value="New">New</option>
-    <option value="Contacted">Contacted</option>
-    <option value="Qualified">Qualified</option>
-    <option value="Lost">Lost</option>
-  </select>
-</td>
+                    {/* Status Dropdown (Fixed) */}
+                    <td style={s.td}>
+                      <select 
+                        value={l.status || 'New'} 
+                        onChange={(e) => handleStatusChange(l.id, e.target.value)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #475569',
+                          backgroundColor: l.status === 'New' ? '#1e3a8a' : 
+                                           l.status === 'Contacted' ? '#78350f' : 
+                                           l.status === 'Qualified' ? '#14532d' : 
+                                           l.status === 'Lost' ? '#7f1d1d' : '#334155',
+                          color: '#e2e8f0',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          outline: 'none'
+                        }}
+                      >
+                        <option value="New">New</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Qualified">Qualified</option>
+                        <option value="Lost">Lost</option>
+                      </select>
+                    </td>
+
+                    {/* Delete Button */}
+                    <td style={s.td}>
+                      <button 
+                        onClick={() => handleDelete(l.id, l.name)} 
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px' }}
+                        title="Delete Lead"
+                      >
+                        🗑
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -130,6 +130,34 @@ function Dashboard({ token, username, onLogout }) {
     }
   }
 
+
+    // Status update handler
+  const handleStatusChange = async (leadId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE}/api/leads/${leadId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) throw new Error('Failed to update status');
+
+      // Local state update karein taake UI turant reflect kare bina reload ke
+      setLeads(prevLeads => 
+        prevLeads.map(lead => 
+          lead.id === leadId ? { ...lead, status: newStatus } : lead
+        )
+      );
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
   const exportCSV = () => {
     if (leads.length === 0) { showMsg('No leads to export', 'error'); return }
     const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
@@ -311,14 +339,30 @@ function Dashboard({ token, username, onLogout }) {
                         {l.is_converted ? ' Hot' : ' Cold'}
                       </span>
                     </td>
-                      <td style={{ ...s.td, textAlign: 'center' }}>
-                      <button
-                        onClick={() => handleDelete(l.id, l.name)}
-                        title={`Delete ${l.name || 'lead'}`}
-                        style={{ background: 'transparent', border: '1px solid #475569', color: '#94a3b8', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
-                      >
-                      </button>
-                    </td>
+
+                    <td>
+  <select 
+    value={lead.status || 'New'} 
+    onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+    className="status-dropdown" // CSS class add kar sakte hain styling ke liye
+    style={{
+      padding: '4px',
+      borderRadius: '4px',
+      border: '1px solid #ccc',
+      backgroundColor: lead.status === 'New' ? '#e3f2fd' : 
+                       lead.status === 'Contacted' ? '#fff3e0' : 
+                       lead.status === 'Qualified' ? '#e8f5e9' : 
+                       lead.status === 'Lost' ? '#ffebee' : 'white',
+      cursor: 'pointer',
+      fontWeight: 'bold'
+    }}
+  >
+    <option value="New">New</option>
+    <option value="Contacted">Contacted</option>
+    <option value="Qualified">Qualified</option>
+    <option value="Lost">Lost</option>
+  </select>
+</td>
                   </tr>
                 ))}
               </tbody>

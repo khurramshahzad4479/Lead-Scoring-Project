@@ -39,6 +39,7 @@ class Lead(Base):
     budget = Column(Float, default=0.0)
     is_converted = Column(Boolean, default=False)
     confidence = Column(Float, nullable=True)
+    status = Column(String, default="New")
     location = Column(String(255))
     lead_origin = Column(String(255))
     total_visits = Column(Integer, default=0)

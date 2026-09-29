@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
 import { API_BASE } from './config'
 
@@ -30,29 +30,12 @@ function PieChart({ hot, cold }) {
   )
 }
 
-const EVENT_META = {
-  page_view:   { icon: '👁', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' },
-  page_exit:   { icon: '🚪', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
-  form_start:  { icon: '✏️', color: '#facc15', bg: 'rgba(250,204,21,0.15)' },
-  field_focus: { icon: '🖱', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
-  form_submit: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' }
-}
-
-const eventDetail = (e) => {
-  if (e.event === 'field_focus') return e.props?.field || ''
-  if (e.event === 'page_exit') return `${e.props?.time_on_page ?? '?'}s on page · ${e.props?.scroll_depth ?? 0}% scrolled`
-  if (e.event === 'page_view') return 'opened the form page'
-  if (e.event === 'form_submit') return 'form submitted'
-  return ''
-}
-
-// Color bands for model confidence (P-convert)
 const scoreColor = (conf) => {
-  if (conf == null) return '#64748b'    // Null — not computed
-  if (conf >= 0.70) return '#ef4444'   // Strong Hot
-  if (conf >= 0.55) return '#f87171'   // Leaning Hot
-  if (conf >= 0.45) return '#facc15'   // Borderline — 50% near threshold
-  return '#22c55e'                     // Cold side
+  if (conf == null) return '#64748b'
+  if (conf >= 0.70) return '#ef4444'
+  if (conf >= 0.55) return '#f87171'
+  if (conf >= 0.45) return '#facc15'
+  return '#22c55e'
 }
 
 function Dashboard({ token, username, onLogout }) {
@@ -63,6 +46,11 @@ function Dashboard({ token, username, onLogout }) {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [events, setEvents] = useState([])
+  
+  // Expandable Row State
+  const [expandedLeadId, setExpandedLeadId] = useState(null)
+  const [leadEvents, setLeadEvents] = useState([])
+  const [noteInput, setNoteInput] = useState('')
 
   const showMsg = (text, type = 'info') => {
     setMsg(String(text))
@@ -81,9 +69,7 @@ function Dashboard({ token, username, onLogout }) {
     } finally { setFetching(false) }
   }
 
-  // ============================================================
   useEffect(() => { if (token) fetchLeads() }, [token])
-  // ============================================================
 
   // Events polling — ever 5 second
   useEffect(() => {
@@ -107,9 +93,7 @@ function Dashboard({ token, username, onLogout }) {
     setLoading(true)
     try {
       const res = await axios.post(`${API_BASE}/predict-lead`, form, { headers: { 'Authorization': `Bearer ${token}` } })
-      const score = res.data.confidence != null
-        ? ` — Score: ${Math.round(res.data.confidence * 100)}%`
-        : ''
+      const score = res.data.confidence != null ? ` — Score: ${Math.round(res.data.confidence * 100)}%` : ''
       showMsg(`${res.data.message}${score}`, 'success')
       setForm(INITIAL_FORM)
       fetchLeads()
@@ -130,31 +114,60 @@ function Dashboard({ token, username, onLogout }) {
     }
   }
 
-  // Status update handler (Fixed: using prop 'token' instead of localStorage)
   const handleStatusChange = async (leadId, newStatus) => {
     try {
       const response = await fetch(`${API_BASE}/leads/${leadId}/status`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus })
       });
-
       if (!response.ok) throw new Error('Failed to update status');
-
-      // Local state update karein taake UI turant reflect kare bina reload ke
-      setLeads(prevLeads => 
-        prevLeads.map(lead => 
-          lead.id === leadId ? { ...lead, status: newStatus } : lead
-        )
-      );
+      setLeads(prevLeads => prevLeads.map(lead => lead.id === leadId ? { ...lead, status: newStatus } : lead))
     } catch (err) {
       console.error('Error updating status:', err);
       alert('Failed to update status. Please try again.');
     }
-  };
+  }
+
+  // Expand Row and Fetch Events
+  const handleRowClick = async (leadId) => {
+    if (expandedLeadId === leadId) {
+      setExpandedLeadId(null)
+      return
+    }
+    setExpandedLeadId(leadId)
+    setLeadEvents([])
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}/events`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) setLeadEvents(await res.json())
+    } catch (err) {
+      console.error("Failed to fetch lead events", err)
+    }
+  }
+
+  // Save Manual Note
+  const handleAddNote = async (leadId) => {
+    if (!noteInput.trim()) return
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}/activity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ note: noteInput })
+      })
+      if (res.ok) {
+        setNoteInput('')
+        // Refresh events for this lead
+        const eventsRes = await fetch(`${API_BASE}/api/leads/${leadId}/events`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (eventsRes.ok) setLeadEvents(await eventsRes.json())
+      }
+    } catch (err) {
+      alert('Failed to save note')
+    }
+  }
 
   const exportCSV = () => {
     if (leads.length === 0) { showMsg('No leads to export', 'error'); return }
@@ -314,68 +327,121 @@ function Dashboard({ token, username, onLogout }) {
               </thead>
               <tbody>
                 {leads.map(l => (
-                  <tr key={l.id}>
-                    <td style={{ ...s.td, color: '#e2e7ee' }}>{l.id}</td>
-                    <td style={{ ...s.td, fontWeight: '500', color: '#e2e8f0' }}>{l.name}</td>
-                    <td style={{ ...s.td, color: '#e8ebef' }}>{l.email}</td>
-                    <td style={{ ...s.td, color: '#94a3b8', fontSize: '12px' }}>
-                      {l.source || '—'}
-                    </td>
-                    <td style={{ ...s.td, fontFamily: 'monospace' }}>
-                      <span
-                        style={{ color: scoreColor(l.confidence), fontWeight: '600' }}
-                        title="Model confidence — probability of conversion"
-                      >
-                        {l.confidence != null ? `${Math.round(l.confidence * 100)}%` : '—'}
-                      </span>
-                    </td> 
-                    <td style={s.td}>
-                      <span style={{
-                        ...s.badge,
-                        background: l.is_converted ? 'rgba(240, 54, 54, 0.15)' : 'rgba(34,197,94,0.15)',
-                        color: l.is_converted ? '#ef4444' : '#22c55e'
-                      }}>
-                        {l.is_converted ? ' Hot' : ' Cold'}
-                      </span>
-                    </td>
+                  <Fragment key={l.id}>
+                    <tr 
+                      key={l.id} 
+                      style={{ cursor: 'pointer' }} 
+                      onClick={() => handleRowClick(l.id)}
+                    >
+                      <td style={{ ...s.td, color: '#e2e7ee' }}>{l.id}</td>
+                      <td style={{ ...s.td, fontWeight: '500', color: '#e2e8f0' }}>{l.name}</td>
+                      <td style={{ ...s.td, color: '#e8ebef' }}>{l.email}</td>
+                      <td style={{ ...s.td, color: '#94a3b8', fontSize: '12px' }}>{l.source || '—'}</td>
+                      <td style={{ ...s.td, fontFamily: 'monospace' }}>
+                        <span style={{ color: scoreColor(l.confidence), fontWeight: '600' }}>
+                          {l.confidence != null ? `${Math.round(l.confidence * 100)}%` : '—'}
+                        </span>
+                      </td> 
+                      <td style={s.td}>
+                        <span style={{
+                          ...s.badge,
+                          background: l.is_converted ? 'rgba(240, 54, 54, 0.15)' : 'rgba(34,197,94,0.15)',
+                          color: l.is_converted ? '#ef4444' : '#22c55e'
+                        }}>
+                          {l.is_converted ? ' Hot' : ' Cold'}
+                        </span>
+                      </td>
+                      <td style={s.td} onClick={(e) => e.stopPropagation()}>
+                        <select 
+                          value={l.status || 'New'} 
+                          onChange={(e) => handleStatusChange(l.id, e.target.value)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #475569',
+                            backgroundColor: l.status === 'New' ? '#1e3a8a' : 
+                                             l.status === 'Contacted' ? '#78350f' : 
+                                             l.status === 'Qualified' ? '#14532d' : 
+                                             l.status === 'Lost' ? '#7f1d1d' : '#334155',
+                            color: '#e2e8f0',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="New">New</option>
+                          <option value="Contacted">Contacted</option>
+                          <option value="Qualified">Qualified</option>
+                          <option value="Lost">Lost</option>
+                        </select>
+                      </td>
+                      <td style={s.td} onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleDelete(l.id, l.name)} 
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px' }}
+                          title="Delete Lead"
+                        >
+                          🗑
+                        </button>
+                      </td>
+                    </tr>
+                    
+                    {/* EXPANDED ROW FOR LEAD DETAILS */}
+                    {expandedLeadId === l.id && (
+                      <tr>
+                        <td colSpan={8} style={{ background: '#0f172a', padding: '20px', borderBottom: '2px solid #334155' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                            
+                            {/* Left Side: Activity Timeline */}
+                            <div>
+                              <h4 style={{ color: '#94a3b8', marginBottom: '12px', fontSize: '14px', textTransform: 'uppercase' }}>Activity Timeline</h4>
+                              {leadEvents.length === 0 ? (
+                                <p style={{ color: '#64748b', fontSize: '14px' }}>No events tracked for this lead yet.</p>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  {leadEvents.map(ev => (
+                                    <div key={ev.id} style={{ border: '1px solid #334155', padding: '10px', borderRadius: '6px', background: '#1e293b' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                        <span style={{ color: ev.event === 'sales_note' ? '#facc15' : '#60a5fa', fontSize: '12px', fontWeight: 'bold' }}>
+                                          {ev.event === 'sales_note' ? '📝 Sales Note' : ev.event === 'status_change' ? '🔄 Status Change' : `⚡ ${ev.event}`}
+                                        </span>
+                                        <span style={{ color: '#64748b', fontSize: '11px' }}>
+                                          {new Date(ev.created_at).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      {ev.event === 'sales_note' && <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px' }}>{ev.props?.note} <span style={{ color: '#64748b', fontSize: '11px' }}>(by {ev.props?.logged_by})</span></p>}
+                                      {ev.event === 'status_change' && <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px' }}>Changed to <b>{ev.props?.new_status}</b></p>}
+                                      {ev.event === 'page_view' && <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Viewed landing page</p>}
+                                      {ev.event === 'form_submit' && <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Submitted the lead form</p>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
 
-                    {/* Status Dropdown (Fixed) */}
-                    <td style={s.td}>
-                      <select 
-                        value={l.status || 'New'} 
-                        onChange={(e) => handleStatusChange(l.id, e.target.value)}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          border: '1px solid #475569',
-                          backgroundColor: l.status === 'New' ? '#1e3a8a' : 
-                                           l.status === 'Contacted' ? '#78350f' : 
-                                           l.status === 'Qualified' ? '#14532d' : 
-                                           l.status === 'Lost' ? '#7f1d1d' : '#334155',
-                          color: '#e2e8f0',
-                          cursor: 'pointer',
-                          fontWeight: 'bold',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="New">New</option>
-                        <option value="Contacted">Contacted</option>
-                        <option value="Qualified">Qualified</option>
-                        <option value="Lost">Lost</option>
-                      </select>
-                    </td>
+                            {/* Right Side: Log New Activity */}
+                            <div>
+                              <h4 style={{ color: '#94a3b8', marginBottom: '12px', fontSize: '14px', textTransform: 'uppercase' }}>Log Sales Activity</h4>
+                              <textarea
+                                style={{ width: '100%', background: '#334155', border: '1px solid #475569', borderRadius: '6px', color: 'white', padding: '10px', minHeight: '100px', boxSizing: 'border-box', fontSize: '14px' }}
+                                placeholder="e.g., Called - no answer, Sent pricing PDF..."
+                                value={noteInput}
+                                onChange={(e) => setNoteInput(e.target.value)}
+                              />
+                              <button 
+                                onClick={() => handleAddNote(l.id)}
+                                style={{ marginTop: '8px', width: '100%', padding: '10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                              >
+                                Save Note
+                              </button>
+                            </div>
 
-                    {/* Delete Button */}
-                    <td style={s.td}>
-                      <button 
-                        onClick={() => handleDelete(l.id, l.name)} 
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-                        title="Delete Lead"
-                      >
-                        🗑
-                      </button>
-                    </td>
-                  </tr>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -425,6 +491,23 @@ function Dashboard({ token, username, onLogout }) {
 
     </div>
   )
+}
+
+// Missing constants from original file added back
+const EVENT_META = {
+  page_view:   { icon: '👁', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' },
+  page_exit:   { icon: '🚪', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
+  form_start:  { icon: '✏️', color: '#facc15', bg: 'rgba(250,204,21,0.15)' },
+  field_focus: { icon: '🖱', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+  form_submit: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' }
+}
+
+const eventDetail = (e) => {
+  if (e.event === 'field_focus') return e.props?.field || ''
+  if (e.event === 'page_exit') return `${e.props?.time_on_page ?? '?'}s on page · ${e.props?.scroll_depth ?? 0}% scrolled`
+  if (e.event === 'page_view') return 'opened the form page'
+  if (e.event === 'form_submit') return 'form submitted'
+  return ''
 }
 
 export default Dashboard

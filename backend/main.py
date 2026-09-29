@@ -427,11 +427,15 @@ async def log_lead_activity(
     
     new_event = models.Event(
         lead_id=lead_id,
+        session_id="manual_entry",  # <-- Yeh add karna zaroori tha
         event="sales_note",
         props={
             "note": payload.note, 
             "logged_by": user_identifier
-        }
+        },
+        url="",                     
+        referrer="",               
+        utm_source=""               
     )
     db.add(new_event)
     db.commit()

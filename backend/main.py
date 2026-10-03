@@ -280,6 +280,22 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
             existing.confidence = result["confidence"]
             if form_data.get("Lead Source"):
                 existing.source = form_data.get("Lead Source")
+
+            existing.is_converted = result["is_hot"]         
+            existing.confidence = result["confidence"]
+            if form_data.get("Lead Source"):
+                existing.source = form_data.get("Lead Source")
+                
+            # --- NAYA: Score History Log ---
+            db.add(models.Event(
+                lead_id=existing.id,
+                session_id="system",
+                event="score_update",
+                props={"confidence": result["confidence"], "label": result["label"]},
+                url="", referrer="", utm_source=""
+            ))
+            db.commit()
+            
             db.commit()
             db.refresh(existing)
             return {
@@ -305,6 +321,16 @@ async def predict_lead(request: Request, db: Session = Depends(get_db), current_
         db.add(new_lead)
         db.commit()
         db.refresh(new_lead)
+
+        db.add(models.Event(
+            lead_id=new_lead.id,
+            session_id="system",
+            event="score_update",
+            props={"confidence": result["confidence"], "label": result["label"]},
+            url="", referrer="", utm_source=""
+        ))
+        db.commit()
+        # -------------------------------
         return {
             "message": f"{new_lead.name} - {result['label']}",
             "prediction": result["label"],
@@ -353,6 +379,7 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
 
         existing = db.query(models.Lead).filter(models.Lead.email == email).first()
         if existing:
+            # ── DUPLICATE LEAD → UPDATE + RE-SCORE ──
             existing.name = name or existing.name
             existing.lead_origin = lead_origin
             existing.source = lead_source
@@ -362,9 +389,20 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
             existing.occupation = data.get("occupation") or existing.occupation
             existing.is_converted = result["is_hot"]
             existing.confidence = result["confidence"]
+            
+            # --- NAYA: Score History Log ---
+            db.add(models.Event(
+                lead_id=existing.id,
+                session_id="system",
+                event="score_update",
+                props={"confidence": result["confidence"], "label": result["label"]},
+                url="", referrer="", utm_source=""
+            ))
+            # -------------------------------
             db.commit()
             db.refresh(existing)
 
+            # New (un-linked) events also link to this lead if session_id is present
             if session_id:
                 db.query(models.Event).filter(
                     models.Event.session_id == session_id,
@@ -391,7 +429,19 @@ async def webhook_lead(request: Request, db: Session = Depends(get_db)):
         db.add(new_lead)
         db.commit()
         db.refresh(new_lead)
+        
+        # --- NAYA: Score History Log ---
+        db.add(models.Event(
+            lead_id=new_lead.id,
+            session_id="system",
+            event="score_update",
+            props={"confidence": result["confidence"], "label": result["label"]},
+            url="", referrer="", utm_source=""
+        ))
+        db.commit()
+        # -------------------------------
 
+        # Link events to this lead if session_id is present
         if session_id:
             db.query(models.Event).filter(
                 models.Event.session_id == session_id,

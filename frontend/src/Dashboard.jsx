@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
 import { API_BASE } from './config'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const INITIAL_FORM = {
   name: '', email: '',
@@ -38,6 +39,22 @@ const scoreColor = (conf) => {
   return '#22c55e'
 }
 
+const EVENT_META = {
+  page_view:   { icon: '👁', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' },
+  page_exit:   { icon: '🚪', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
+  form_start:  { icon: '✏️', color: '#facc15', bg: 'rgba(250,204,21,0.15)' },
+  field_focus: { icon: '🖱', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+  form_submit: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' }
+}
+
+const eventDetail = (e) => {
+  if (e.event === 'field_focus') return e.props?.field || ''
+  if (e.event === 'page_exit') return `${e.props?.time_on_page ?? '?'}s on page · ${e.props?.scroll_depth ?? 0}% scrolled`
+  if (e.event === 'page_view') return 'opened the form page'
+  if (e.event === 'form_submit') return 'form submitted'
+  return ''
+}
+
 function Dashboard({ token, username, onLogout }) {
   const [leads, setLeads] = useState([])
   const [msg, setMsg] = useState('')
@@ -51,6 +68,7 @@ function Dashboard({ token, username, onLogout }) {
   const [expandedLeadId, setExpandedLeadId] = useState(null)
   const [leadEvents, setLeadEvents] = useState([])
   const [noteInput, setNoteInput] = useState('')
+  const [scoreHistory, setScoreHistory] = useState([])
 
   const showMsg = (text, type = 'info') => {
     setMsg(String(text))
@@ -71,7 +89,6 @@ function Dashboard({ token, username, onLogout }) {
 
   useEffect(() => { if (token) fetchLeads() }, [token])
 
-  // Events polling — ever 5 second
   useEffect(() => {
     if (!token) return
     const load = async () => {
@@ -81,7 +98,7 @@ function Dashboard({ token, username, onLogout }) {
         })
         if (res.status === 401) { onLogout(); return }
         if (res.ok) setEvents(await res.json())
-      } catch (err) { /* backend asleep — next 5s tick retry */ }
+      } catch (err) { }
     }
     load()
     const t = setInterval(load, 5000)
@@ -129,7 +146,6 @@ function Dashboard({ token, username, onLogout }) {
     }
   }
 
-  // Expand Row and Fetch Events
   const handleRowClick = async (leadId) => {
     if (expandedLeadId === leadId) {
       setExpandedLeadId(null)
@@ -137,17 +153,30 @@ function Dashboard({ token, username, onLogout }) {
     }
     setExpandedLeadId(leadId)
     setLeadEvents([])
+    setScoreHistory([])
     try {
       const res = await fetch(`${API_BASE}/api/leads/${leadId}/events`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      if (res.ok) setLeadEvents(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        setLeadEvents(data)
+        
+        // Filter score_update events for chart
+        const history = data
+          .filter(ev => ev.event === 'score_update')
+          .reverse() // Chronological order
+          .map(ev => ({
+            time: new Date(ev.created_at).toLocaleTimeString('en-GB', { hour12: false }),
+            score: Math.round((ev.props?.confidence || 0) * 100)
+          }))
+        setScoreHistory(history)
+      }
     } catch (err) {
       console.error("Failed to fetch lead events", err)
     }
   }
 
-  // Save Manual Note
   const handleAddNote = async (leadId) => {
     if (!noteInput.trim()) return
     try {
@@ -158,7 +187,6 @@ function Dashboard({ token, username, onLogout }) {
       })
       if (res.ok) {
         setNoteInput('')
-        // Refresh events for this lead
         const eventsRes = await fetch(`${API_BASE}/api/leads/${leadId}/events`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
@@ -329,7 +357,6 @@ function Dashboard({ token, username, onLogout }) {
                 {leads.map(l => (
                   <Fragment key={l.id}>
                     <tr 
-                      key={l.id} 
                       style={{ cursor: 'pointer' }} 
                       onClick={() => handleRowClick(l.id)}
                     >
@@ -390,6 +417,25 @@ function Dashboard({ token, username, onLogout }) {
                     {expandedLeadId === l.id && (
                       <tr>
                         <td colSpan={8} style={{ background: '#0f172a', padding: '20px', borderBottom: '2px solid #334155' }}>
+                          
+                          {/* SCORE HISTORY GRAPH */}
+                          {scoreHistory.length > 0 && (
+                            <div style={{ marginBottom: '20px', border: '1px solid #334155', padding: '15px', borderRadius: '8px', background: '#1e293b' }}>
+                              <h4 style={{ color: '#94a3b8', marginBottom: '15px', fontSize: '14px', textTransform: 'uppercase' }}>📈 Score History Trend</h4>
+                              <div style={{ width: '100%', height: 200 }}>
+                                <ResponsiveContainer>
+                                  <LineChart data={scoreHistory} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                    <XAxis dataKey="time" stroke="#64748b" fontSize={12} />
+                                    <YAxis domain={[0, 100]} stroke="#64748b" fontSize={12} />
+                                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #475569', color: '#e2e8f0' }} />
+                                    <Line type="monotone" dataKey="score" stroke="#facc15" strokeWidth={2} dot={{ fill: '#facc15', r: 4 }} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )}
+
                           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
                             
                             {/* Left Side: Activity Timeline */}
@@ -403,7 +449,7 @@ function Dashboard({ token, username, onLogout }) {
                                     <div key={ev.id} style={{ border: '1px solid #334155', padding: '10px', borderRadius: '6px', background: '#1e293b' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                         <span style={{ color: ev.event === 'sales_note' ? '#facc15' : '#60a5fa', fontSize: '12px', fontWeight: 'bold' }}>
-                                          {ev.event === 'sales_note' ? '📝 Sales Note' : ev.event === 'status_change' ? '🔄 Status Change' : `⚡ ${ev.event}`}
+                                          {ev.event === 'sales_note' ? '📝 Sales Note' : ev.event === 'status_change' ? '🔄 Status Change' : ev.event === 'score_update' ? '📊 Score Updated' : `⚡ ${ev.event}`}
                                         </span>
                                         <span style={{ color: '#64748b', fontSize: '11px' }}>
                                           {new Date(ev.created_at).toLocaleString()}
@@ -411,6 +457,7 @@ function Dashboard({ token, username, onLogout }) {
                                       </div>
                                       {ev.event === 'sales_note' && <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px' }}>{ev.props?.note} <span style={{ color: '#64748b', fontSize: '11px' }}>(by {ev.props?.logged_by})</span></p>}
                                       {ev.event === 'status_change' && <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px' }}>Changed to <b>{ev.props?.new_status}</b></p>}
+                                      {ev.event === 'score_update' && <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px' }}>New Score: <b>{Math.round((ev.props?.confidence || 0) * 100)}%</b> ({ev.props?.label})</p>}
                                       {ev.event === 'page_view' && <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Viewed landing page</p>}
                                       {ev.event === 'form_submit' && <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Submitted the lead form</p>}
                                     </div>
@@ -491,23 +538,6 @@ function Dashboard({ token, username, onLogout }) {
 
     </div>
   )
-}
-
-// Missing constants from original file added back
-const EVENT_META = {
-  page_view:   { icon: '👁', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' },
-  page_exit:   { icon: '🚪', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
-  form_start:  { icon: '✏️', color: '#facc15', bg: 'rgba(250,204,21,0.15)' },
-  field_focus: { icon: '🖱', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
-  form_submit: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' }
-}
-
-const eventDetail = (e) => {
-  if (e.event === 'field_focus') return e.props?.field || ''
-  if (e.event === 'page_exit') return `${e.props?.time_on_page ?? '?'}s on page · ${e.props?.scroll_depth ?? 0}% scrolled`
-  if (e.event === 'page_view') return 'opened the form page'
-  if (e.event === 'form_submit') return 'form submitted'
-  return ''
 }
 
 export default Dashboard
